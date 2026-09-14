@@ -1,7 +1,9 @@
-// Copies docs/{adr,explanation,how-to,reference,tutorials} from the
+// Copies docs/{explanation,how-to,reference,tutorials} from the
 // vendor/ submodules into src/content/docs/, since Starlight's docs
 // collection requires files to live under src/content/docs/ with a
 // `title` frontmatter field and routes without the .md extension.
+// ADRs are excluded: contributor-facing decision history, not part
+// of the site's Diátaxis user docs.
 //
 // Links are rewritten to be relative to the current page (rather than
 // site-root-absolute), since this site deploys under a GitHub Pages
@@ -16,7 +18,7 @@ import { dirname, join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), "..");
-const categories = ["tutorials", "how-to", "explanation", "reference", "adr"];
+const categories = ["tutorials", "how-to", "explanation", "reference"];
 
 const products = [
   { repoDir: "topo-tools-py", repoSlugs: ["topo-tools-py"], key: "python" },
@@ -29,21 +31,32 @@ function splitHash(url) {
   return i === -1 ? [url, ""] : [url.slice(0, i), url.slice(i)];
 }
 
-// Cross-repo ADR links use a literal ../../../topo-tools-{py,js}/docs/... path
+// Cross-repo links use a literal ../../../topo-tools-{py,js}/docs/... path
 // (the sister repos are checked out as siblings on disk); every other
 // relative link stays within its own product's docs/ tree.
 const crossRepoLinkPattern = /^(?:\.\.\/)+(topo-tools-(?:py|js))\/docs\/([^/]+)\/(.+)\.md$/;
 
-function rewriteLink(url) {
+// ADRs aren't synced onto the site, so a link into docs/adr/ (same-repo,
+// since no cross-repo doc outside adr/ links into another repo's adr/)
+// is rewritten to the source file on GitHub instead of a site route.
+const sameRepoAdrLinkPattern = /^(?:\.\.\/)*adr\/(.+)\.md$/;
+
+function rewriteLink(url, repoDir) {
   const [path, hash] = splitHash(url);
   if (!path || /^[a-z][a-z0-9+.-]*:/i.test(path)) return url; // anchor-only or has a URL scheme
 
   const crossRepo = path.match(crossRepoLinkPattern);
   if (crossRepo) {
-    const [, repoDir, category, file] = crossRepo;
-    const targetKey = keyByRepoDir[repoDir];
+    const [, targetRepoDir, category, file] = crossRepo;
+    const targetKey = keyByRepoDir[targetRepoDir];
     const slug = file === "README" ? "" : file;
     return `../../${targetKey}/${category}/${slug}${hash}`;
+  }
+
+  const sameRepoAdr = path.match(sameRepoAdrLinkPattern);
+  if (sameRepoAdr) {
+    const file = sameRepoAdr[1] === "README" ? "" : `${sameRepoAdr[1]}.md`;
+    return `https://github.com/OCHA-DAP/${repoDir}/blob/main/docs/adr/${file}${hash}`;
   }
 
   if (path.endsWith(".md")) {
@@ -56,13 +69,14 @@ function rewriteLink(url) {
 
 const linkRecords = []; // { fromDir, link, sourceFile }
 
-function rewriteLinksInBody(body, fromDir, sourceFile) {
+function rewriteLinksInBody(body, fromDir, sourceFile, repoDir) {
   return body.replace(/(\]\()([^)\s]+)(\))/g, (match, open, url, close) => {
-    const rewritten = rewriteLink(url);
-    if (rewritten !== url) {
-      // only links actually rewritten as doc links (.md / cross-repo docs/)
-      // are validated; untouched relative links (e.g. source file
-      // references) were never meant to resolve as site routes.
+    const rewritten = rewriteLink(url, repoDir);
+    if (rewritten !== url && !/^[a-z][a-z0-9+.-]*:/i.test(rewritten)) {
+      // only links rewritten to a site-relative doc route are validated;
+      // links redirected to an external URL (e.g. an ADR on GitHub) and
+      // untouched relative links (e.g. source file references) were never
+      // meant to resolve as site routes.
       const [path] = splitHash(rewritten);
       linkRecords.push({ fromDir, link: path, sourceFile });
     }
@@ -115,7 +129,7 @@ for (const product of products) {
       const fallbackTitle = humanize(entry === "README.md" ? category : entry.replace(/\.md$/, ""));
       const { title, body } = extractTitle(raw, fallbackTitle);
       const sourceFile = posix.join(product.repoDir, "docs", category, entry);
-      const rewritten = rewriteLinksInBody(body, destDirRoute, sourceFile);
+      const rewritten = rewriteLinksInBody(body, destDirRoute, sourceFile, product.repoDir);
 
       const destName = entry === "README.md" ? "index.md" : entry;
       const frontmatter = `---\ntitle: ${JSON.stringify(title)}\n---\n\n`;
