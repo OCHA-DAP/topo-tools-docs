@@ -1,0 +1,6 @@
+[submodule "vendor/topo-tools-py"]
+	path = vendor/topo-tools-py
+	url = https://github.com/OCHA-DAP/topo-tools-py.git
+[submodule "vendor/topo-tools-js"]
+	path = vendor/topo-tools-js
+	url = https://github.com/OCHA-DAP/topo-tools-js.git
