@@ -1,0 +1,39 @@
+name: Bump vendored docs submodule
+
+on:
+  repository_dispatch:
+    types: [docs-updated]
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Update submodule
+        id: update
+        run: |
+          SUBMODULE="vendor/${{ github.event.client_payload.submodule }}"
+          git submodule update --remote "$SUBMODULE"
+          if git diff --quiet -- "$SUBMODULE"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Commit and push
+        if: steps.update.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "vendor/${{ github.event.client_payload.submodule }}"
+          git commit -m "Update ${{ github.event.client_payload.submodule }} docs"
+          git push
+      - name: Trigger deploy
+        if: steps.update.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy.yml --ref main
