@@ -13,6 +13,14 @@ That sync runs automatically before `dev` and `build`; the generated
 `src/content/docs/python/` and `src/content/docs/js/` directories are
 gitignored.
 
+Links are rewritten relative to the current page rather than site-root-
+absolute, since neither Astro nor Starlight base-prefixes absolute links
+written in markdown content (only their own generated nav/sidebar), and
+this site deploys under a GitHub Pages subpath. The sync script resolves
+every rewritten link against the files it actually writes and exits
+non-zero if one doesn't resolve, so a broken doc link fails the build
+instead of shipping a dead link.
+
 ## Development
 
 ```sh
@@ -29,9 +37,11 @@ The submodules are pinned to a commit. When `docs/` changes on `main` in
 either sister repo, its `notify-docs.yml` workflow sends a
 `repository_dispatch` here; `.github/workflows/bump-submodule.yml` advances
 that submodule's pin, commits, and triggers a redeploy, no manual step
-needed.
+needed. As a safety net in case that chain ever breaks silently (expired
+token, disabled workflow), `.github/workflows/scheduled-sync.yml` re-checks
+both submodules daily regardless of dispatch.
 
-To do it by hand instead (e.g. to pull in an update before its workflow
+To do it by hand instead (e.g. to pull in an update before either workflow
 runs):
 
 ```sh

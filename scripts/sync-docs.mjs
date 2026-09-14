@@ -2,8 +2,17 @@
 // vendor/ submodules into src/content/docs/, since Starlight's docs
 // collection requires files to live under src/content/docs/ with a
 // `title` frontmatter field and routes without the .md extension.
+//
+// Links are rewritten to be relative to the current page (rather than
+// site-root-absolute), since this site deploys under a GitHub Pages
+// subpath and neither Astro nor Starlight base-prefixes absolute links
+// written in markdown content, only their own generated nav/sidebar
+// links. That makes an off-the-shelf link-validator plugin unusable
+// here (they assume absolute links), so every rewritten link is
+// resolved against the files actually written below and the sync
+// fails loudly on anything that doesn't resolve.
 import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -45,8 +54,20 @@ function rewriteLink(url) {
   return url;
 }
 
-function rewriteLinksInBody(body) {
-  return body.replace(/(\]\()([^)\s]+)(\))/g, (match, open, url, close) => `${open}${rewriteLink(url)}${close}`);
+const linkRecords = []; // { fromDir, link, sourceFile }
+
+function rewriteLinksInBody(body, fromDir, sourceFile) {
+  return body.replace(/(\]\()([^)\s]+)(\))/g, (match, open, url, close) => {
+    const rewritten = rewriteLink(url);
+    if (rewritten !== url) {
+      // only links actually rewritten as doc links (.md / cross-repo docs/)
+      // are validated; untouched relative links (e.g. source file
+      // references) were never meant to resolve as site routes.
+      const [path] = splitHash(rewritten);
+      linkRecords.push({ fromDir, link: path, sourceFile });
+    }
+    return `${open}${rewritten}${close}`;
+  });
 }
 
 function humanize(filename) {
@@ -66,6 +87,8 @@ function extractTitle(body, fallback) {
   return { title: fallback, body };
 }
 
+const writtenRoutes = new Set();
+
 for (const product of products) {
   const srcDocsDir = join(rootDir, "vendor", product.repoDir, "docs");
   const destDir = join(rootDir, "src", "content", "docs", product.key);
@@ -82,6 +105,7 @@ for (const product of products) {
 
     const destCategoryDir = join(destDir, category);
     mkdirSync(destCategoryDir, { recursive: true });
+    const destDirRoute = posix.join(product.key, category);
 
     for (const entry of entries) {
       const srcPath = join(srcCategoryDir, entry);
@@ -90,11 +114,27 @@ for (const product of products) {
       const raw = readFileSync(srcPath, "utf8");
       const fallbackTitle = humanize(entry === "README.md" ? category : entry.replace(/\.md$/, ""));
       const { title, body } = extractTitle(raw, fallbackTitle);
-      const rewritten = rewriteLinksInBody(body);
+      const sourceFile = posix.join(product.repoDir, "docs", category, entry);
+      const rewritten = rewriteLinksInBody(body, destDirRoute, sourceFile);
 
       const destName = entry === "README.md" ? "index.md" : entry;
       const frontmatter = `---\ntitle: ${JSON.stringify(title)}\n---\n\n`;
       writeFileSync(join(destCategoryDir, destName), frontmatter + rewritten.trimStart());
+
+      writtenRoutes.add(destName === "index.md" ? destDirRoute : posix.join(destDirRoute, destName.slice(0, -3)));
     }
   }
+}
+
+const broken = linkRecords.filter(({ fromDir, link }) => {
+  const resolved = posix.normalize(posix.join(fromDir, link)).replace(/\/$/, "");
+  return !writtenRoutes.has(resolved);
+});
+
+if (broken.length > 0) {
+  console.error(`sync-docs: ${broken.length} internal link(s) don't resolve to a synced page:\n`);
+  for (const { sourceFile, link } of broken) {
+    console.error(`  ${sourceFile}: ${link}`);
+  }
+  process.exit(1);
 }
