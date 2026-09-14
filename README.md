@@ -6,9 +6,10 @@ and [topo-tools-js](https://github.com/OCHA-DAP/topo-tools-js), built with
 
 Content isn't written here. `vendor/topo-tools-py` and `vendor/topo-tools-js`
 are git submodules pinned to the sister repos; `scripts/sync-docs.mjs` copies
-each repo's `docs/{tutorials,how-to,explanation,reference,adr}` into
+each repo's `docs/{tutorials,how-to,explanation,reference}` into
 `src/content/docs/{python,js}/`, injecting Starlight frontmatter and
-rewriting internal links (including cross-repo ADR links) into site routes.
+rewriting internal links into site routes. ADRs aren't synced: they're
+contributor-facing investigation narrative, not user-facing product docs.
 That sync runs automatically before `dev` and `build`; the generated
 `src/content/docs/python/` and `src/content/docs/js/` directories are
 gitignored.

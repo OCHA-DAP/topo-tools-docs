@@ -25,7 +25,6 @@ export default defineConfig({
 						{ label: 'How-to', items: [{ autogenerate: { directory: 'python/how-to' } }] },
 						{ label: 'Explanation', items: [{ autogenerate: { directory: 'python/explanation' } }] },
 						{ label: 'Reference', items: [{ autogenerate: { directory: 'python/reference' } }] },
-						{ label: 'ADRs', items: [{ autogenerate: { directory: 'python/adr' } }] },
 					],
 				},
 				{
@@ -35,7 +34,6 @@ export default defineConfig({
 						{ label: 'How-to', items: [{ autogenerate: { directory: 'js/how-to' } }] },
 						{ label: 'Explanation', items: [{ autogenerate: { directory: 'js/explanation' } }] },
 						{ label: 'Reference', items: [{ autogenerate: { directory: 'js/reference' } }] },
-						{ label: 'ADRs', items: [{ autogenerate: { directory: 'js/adr' } }] },
 					],
 				},
 			],
